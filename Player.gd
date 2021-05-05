@@ -6,8 +6,10 @@ extends KinematicBody2D
 # var b = "text"
 var input_direction = Vector2.ZERO
 var previous_input_direction = Vector2.ZERO
-
-var walk_speed = 75
+var stopper = null
+var stopperClass = null;
+var walk_speed = 55
+var tile_size = 16
 enum PlayerStates {
 	WALKING,
 	STOPPING,
@@ -16,11 +18,11 @@ enum PlayerStates {
 var player_state = PlayerStates.IDLE
 # Called when the node enters the scene tree for the first time.
 func _ready():
-	pass # Replace with function body.
+	stopperClass = load("res://MovementStopper.tscn")
 
+	
 func _physics_process(delta):
 	process_input()
-	move_and_collide(input_direction * delta * walk_speed)
 	if player_state == PlayerStates.WALKING:
 		walk(delta)
 	elif player_state == PlayerStates.STOPPING:
@@ -29,40 +31,52 @@ func _physics_process(delta):
 		idle()
 		
 func process_input():
-	if input_direction != Vector2.ZERO:
-		previous_input_direction = input_direction
 	if input_direction.y == 0:
 		input_direction.x = int(Input.get_action_strength("ui_right")) - int(Input.get_action_strength("ui_left"))
 	if input_direction.x == 0:
 		input_direction.y = int(Input.get_action_strength("ui_down")) - int(Input.get_action_strength("ui_up"))
 		
-	if input_direction != Vector2.ZERO:
+	if input_direction != Vector2.ZERO and player_state != PlayerStates.STOPPING:
+		previous_input_direction = input_direction
 		player_state = PlayerStates.WALKING
 	elif player_state == PlayerStates.WALKING:
+		#player has released the walking action
 		add_stopper()
 		player_state = PlayerStates.STOPPING
 
 func walk(delta):
 	var result = move_and_collide(input_direction * walk_speed * delta)
-	
+		
 func stop(delta):
 	var result = move_and_collide(previous_input_direction * walk_speed * delta)	
 	if result:
-		#result.collider.queue_free();
+		stopper.queue_free();
 		player_state = PlayerStates.IDLE
 
 func idle():
 	pass
 	
 func add_stopper():
-	var stopperClass = load("res://MovementStopper.tscn")
-	var stopper = stopperClass.instance()
-	var x_remainder = fmod(position.x, 16)
-	var y_remainder = fmod(position.y, 16)
-	if x_remainder != 0:
-		stopper.position.x = position.x - x_remainder + 16
-	if y_remainder != 0:
-		stopper.position.y = position.y - y_remainder - 16
+	if is_instance_valid(stopper):
+		stopper.queue_free()
+	stopper = stopperClass.instance()
+	stopper.position.x = position.x
+	stopper.position.y = position.y
+	if(previous_input_direction.x > 0):#moving right
+		var right_edge = position.x + tile_size
+		var x_remainder = fmod(right_edge, tile_size)
+		stopper.position.x = right_edge - x_remainder + tile_size
+	elif(previous_input_direction.x < 0):#moving left
+		var x_remainder = fmod(position.x, tile_size)
+		stopper.position.x = position.x - x_remainder - tile_size
+	elif(previous_input_direction.y < 0):#moving up
+		var y_remainder = fmod(position.y, tile_size)
+		stopper.position.y = position.y - y_remainder - tile_size
+	elif(previous_input_direction.y > 0):#moving down
+		var bottom_edge = position.y + tile_size
+		var y_remainder = fmod(bottom_edge, tile_size)
+		stopper.position.y = bottom_edge - y_remainder + tile_size
+			
 	get_parent().add_child(stopper)
 	
 # Called every frame. 'delta' is the elapsed time since the previous frame.
