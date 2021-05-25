@@ -8,8 +8,13 @@ var input_direction = Vector2.ZERO
 var previous_input_direction = Vector2.ZERO
 var stopper = null
 var stopperClass = null;
-var walk_speed = 55
 var tile_size = 16
+export var walk_speed = 55
+
+export var vision_range = 3
+export var initial_direction = Vector2(0,1)
+
+const offset = 8
 enum PlayerStates {
 	WALKING,
 	STOPPING,
@@ -28,13 +33,16 @@ var queued_state = null
 onready var animation_tree = $AnimationTree
 onready var animation_state = animation_tree.get("parameters/playback")
 onready var animationPlayer = $AnimationPlayer
+onready var playerDetector = $Area2D/PlayerDetector
+onready var main_collider = $CollisionShape2D
+onready var collision_offset = main_collider.position;
+
 # Called when the node enters the scene tree for the first time.
 func _ready():
-	print("ready")
 	animation_tree.active = true
-	animation_tree.set("parameters/Idle/blend_position", Vector2(0,1))
+	animation_tree.set("parameters/Idle/blend_position", initial_direction)
+	update_player_detector(initial_direction)
 	animation_state.travel("Idle")
-	print(animation_state.get_current_play_position())
 	stopperClass = load("res://MovementStopper.tscn")
 
 	
@@ -70,6 +78,18 @@ func process_input():
 		add_stopper()
 		player_state = PlayerStates.STOPPING
 
+func update_player_detector(vector):
+	if(vector != Vector2.ZERO):
+		playerDetector.scale.x = abs(vector.x) * vision_range
+		if(playerDetector.scale.x < 1):
+			playerDetector.scale.x = 1
+		playerDetector.scale.y = abs(vector.y) * vision_range
+		if(playerDetector.scale.y < 1):
+			playerDetector.scale.y = 1
+		playerDetector.position.x = vector.x * (tile_size * 2) + collision_offset.x
+		playerDetector.position.y = vector.y * (tile_size * 2) + collision_offset.y
+	
+
 func walk(delta):
 	if animation_state.get_current_node() != "Walk":
 		animation_state.travel("Walk")
@@ -89,6 +109,7 @@ func idle(delta):
 func turn(delta):
 	if animation_state.get_current_node() != "Turn":
 		animation_state.travel("Turn")
+	update_player_detector(input_direction)
 	queued_state = PlayerStates.IDLE
 	pass
 	
