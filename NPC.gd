@@ -10,22 +10,26 @@ var stopper = null
 var stopperClass = null;
 var tile_size = 16
 export var walk_speed = 55
-
+export var patrol_range = 4
 export var vision_range = 3
 export var initial_direction = Vector2(0,1)
+var initial_position = Vector2.ZERO
+var movement_direction = Vector2.ZERO
 
 const offset = 8
 enum PlayerStates {
 	WALKING,
 	STOPPING,
 	TURNING,
-	IDLE
+	IDLE,
+	PATROLLING
 }
 const stateFunctions = {
 	PlayerStates.WALKING: "walk",
 	PlayerStates.STOPPING: "stop",
 	PlayerStates.TURNING: "turn",
-	PlayerStates.IDLE: "idle"
+	PlayerStates.IDLE: "idle",
+	PlayerStates.PATROLLING: "patrol"
 }
 var player_state = PlayerStates.IDLE
 var queued_state = null
@@ -39,6 +43,8 @@ onready var collision_offset = main_collider.position;
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
+	initial_position = position;
+	movement_direction = initial_direction;
 	animation_tree.active = true
 	animation_tree.set("parameters/Idle/blend_position", initial_direction)
 	update_player_detector(initial_direction)
@@ -47,7 +53,7 @@ func _ready():
 
 	
 func _physics_process(delta):
-	process_input()
+	process_state()
 	call(stateFunctions[player_state], delta)
 
 func set_state(state):
@@ -58,12 +64,10 @@ func set_queued_state():
 		player_state = queued_state
 		queued_state = null
 
-func process_input():
-	if input_direction.y == 0:
-		input_direction.x = int(Input.get_action_strength("ui_right")) - int(Input.get_action_strength("ui_left"))
-	if input_direction.x == 0:
-		input_direction.y = int(Input.get_action_strength("ui_down")) - int(Input.get_action_strength("ui_up"))
-
+func process_state():
+	if patrol_range != 0:
+		input_direction = movement_direction;
+		
 	if input_direction != Vector2.ZERO and player_state != PlayerStates.STOPPING:
 		animation_tree.set("parameters/Walk/blend_position", input_direction)
 		animation_tree.set("parameters/Idle/blend_position", input_direction)
@@ -71,13 +75,13 @@ func process_input():
 		if input_direction != previous_input_direction:
 			player_state = PlayerStates.TURNING
 		elif player_state != PlayerStates.TURNING:
-			player_state = PlayerStates.WALKING
+			player_state = PlayerStates.PATROLLING
 		previous_input_direction = input_direction
-	elif player_state == PlayerStates.WALKING:
+	elif player_state == PlayerStates.PATROLLING:
 		#player has released the walking action
 		add_stopper()
 		player_state = PlayerStates.STOPPING
-
+	
 func update_player_detector(vector):
 	if(vector != Vector2.ZERO):
 		playerDetector.scale.x = abs(vector.x) * vision_range
@@ -89,24 +93,39 @@ func update_player_detector(vector):
 		playerDetector.position.x = vector.x * (tile_size * 2) + collision_offset.x
 		playerDetector.position.y = vector.y * (tile_size * 2) + collision_offset.y
 	
+func patrol(delta):
+	walk(delta)
+	var distance_traveled = initial_position.distance_to(position)
+	if(distance_traveled > (patrol_range * tile_size) - (tile_size * 2)):
+		add_stopper()
+		previous_input_direction = input_direction
+		player_state = PlayerStates.STOPPING
+	pass
 
 func walk(delta):
 	if animation_state.get_current_node() != "Walk":
 		animation_state.travel("Walk")
-	var result = move_and_collide(input_direction * walk_speed * delta)
-		
-func stop(delta):
-	var result = move_and_collide(previous_input_direction * walk_speed * delta)	
-	if result:
-		stopper.queue_free();
-		player_state = PlayerStates.IDLE
+	return move_and_collide(input_direction * walk_speed * delta)
 
-func idle(delta):
+func stop(delta):
+	var result = move_and_collide(previous_input_direction * walk_speed * delta)
+	if result:
+		if result.collider.get_instance_id() == stopper.get_instance_id():
+			stopper.queue_free();
+			movement_direction = Vector2.ZERO - movement_direction
+			print(movement_direction)
+			initial_position = position
+			player_state = PlayerStates.PATROLLING
+		else:
+			player_state = PlayerStates.IDLE
+
+func idle(_delta):
+	print("idle")
 	if animation_state.get_current_node() != "Idle":
 		animation_state.travel("Idle")
 	pass
 
-func turn(delta):
+func turn(_delta):
 	if animation_state.get_current_node() != "Turn":
 		animation_state.travel("Turn")
 	update_player_detector(input_direction)
@@ -119,6 +138,7 @@ func add_stopper():
 	stopper = stopperClass.instance()
 	stopper.position.x = position.x
 	stopper.position.y = position.y
+	stopper.set_in_npc_layer()
 	if(previous_input_direction.x > 0):#moving right
 		var right_edge = position.x + tile_size
 		var x_remainder = fmod(right_edge, tile_size)

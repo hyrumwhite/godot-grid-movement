@@ -80,6 +80,8 @@ func stop(delta):
 	if result:
 		stopper.queue_free();
 		player_state = PlayerStates.IDLE
+		position.x = stepify(position.x, tile_size)
+		position.y = stepify(position.y, tile_size)
 
 func idle(delta):
 	if animation_state.get_current_node() != "Idle":
