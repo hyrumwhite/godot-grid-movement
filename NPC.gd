@@ -106,10 +106,13 @@ func waiting(delta):
 		timer_running = true
 		yield(get_tree().create_timer(3), "timeout")
 		timer_running = false;
-		patrol_collision = null
+		if(patrol_collision.collider.position.distance_to(position) > tile_size):
+			patrol_collision = null
 
 func patrol(delta):
 	patrol_collision = walk(delta)
+	if patrol_collision:
+		return
 	var distance_traveled = initial_position.distance_to(position)
 	if(distance_traveled > (patrol_range * tile_size) - (tile_size * 2)):
 		add_stopper()
@@ -136,7 +139,9 @@ func stop(delta):
 func idle(_delta):
 	if animation_state.get_current_node() != "Idle":
 		animation_state.travel("Idle")
-	pass
+	position.y = stepify(position.y, tile_size)
+	position.x = stepify(position.x, tile_size)
+	
 
 func turn(_delta):
 	if animation_state.get_current_node() != "Turn":
