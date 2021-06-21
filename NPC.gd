@@ -22,17 +22,20 @@ enum PlayerStates {
 	STOPPING,
 	TURNING,
 	IDLE,
-	PATROLLING
+	PATROLLING,
+	WAITING
 }
 const stateFunctions = {
 	PlayerStates.WALKING: "walk",
 	PlayerStates.STOPPING: "stop",
 	PlayerStates.TURNING: "turn",
 	PlayerStates.IDLE: "idle",
-	PlayerStates.PATROLLING: "patrol"
+	PlayerStates.PATROLLING: "patrol",
+	PlayerStates.WAITING: "waiting"
 }
 var player_state = PlayerStates.IDLE
 var queued_state = null
+var patrol_collision = null
 
 onready var animation_tree = $AnimationTree
 onready var animation_state = animation_tree.get("parameters/playback")
@@ -65,6 +68,9 @@ func set_queued_state():
 		queued_state = null
 
 func process_state():
+	if patrol_collision:
+		player_state = PlayerStates.WAITING
+		return
 	if patrol_range != 0:
 		input_direction = movement_direction;
 		
@@ -92,9 +98,18 @@ func update_player_detector(vector):
 			playerDetector.scale.y = 1
 		playerDetector.position.x = vector.x * (tile_size * 2) + collision_offset.x
 		playerDetector.position.y = vector.y * (tile_size * 2) + collision_offset.y
-	
+
+var timer_running = false
+func waiting(delta):
+	idle(delta)
+	if timer_running == false:
+		timer_running = true
+		yield(get_tree().create_timer(3), "timeout")
+		timer_running = false;
+		patrol_collision = null
+
 func patrol(delta):
-	walk(delta)
+	patrol_collision = walk(delta)
 	var distance_traveled = initial_position.distance_to(position)
 	if(distance_traveled > (patrol_range * tile_size) - (tile_size * 2)):
 		add_stopper()
@@ -113,14 +128,12 @@ func stop(delta):
 		if result.collider.get_instance_id() == stopper.get_instance_id():
 			stopper.queue_free();
 			movement_direction = Vector2.ZERO - movement_direction
-			print(movement_direction)
 			initial_position = position
 			player_state = PlayerStates.PATROLLING
 		else:
 			player_state = PlayerStates.IDLE
 
 func idle(_delta):
-	print("idle")
 	if animation_state.get_current_node() != "Idle":
 		animation_state.travel("Idle")
 	pass
